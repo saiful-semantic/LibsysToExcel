@@ -9,9 +9,9 @@ parser = ArgumentParser(description='HTML to Excel data extraction for bibliogra
 parser.add_argument(
     "-i", "--input", dest="inputFile", required=True, type=str, help="The input HTML file"
 )
-# parser.add_argument(
-#     "-o", "--out", dest="outFile", required=True, type=str, help="Output Excel file"
-# )
+parser.add_argument(
+    "-o", "--out", dest="outFile", required=False, type=str, help="Output Excel file"
+)
 parser.add_argument(
     "-l", "--limit", dest="limit", required=False, type=int, help="Limit to number of records"
 )
@@ -114,7 +114,7 @@ def html_to_excel(html_file):
     new_record_rows = []
     new_record_type = ''
     record_count = 0
-    for tr in all_table_rows:
+    for tr in tqdm(all_table_rows, desc="Extracting from HTML"):
         new_record, record_type = start_of_record(tr)
 
         # Found start of a new record
@@ -132,6 +132,9 @@ def html_to_excel(html_file):
             new_record_type = record_type
         else:
             new_record_rows.append(tr)
+
+        if args.limit and record_count == args.limit:
+            break
     
     # Save the last row too
     if len(new_record_rows):
@@ -143,15 +146,26 @@ def html_to_excel(html_file):
 
     ## Parse and extract book elements
     book_data = []
-    for record_num, record_data in records.items():
-        print(f"Record# {record_num}")
-        print(f"Type: {record_data['record_type']}")
-        print(f"Rows: {len(record_data['rows'])}")
+    for record_num, record_data in tqdm(records.items(), desc="Parsing data"):
+        if not args.outFile:
+            print(f"Record# {record_num}")
+            print(f"Type: {record_data['record_type']}")
+            print(f"Rows: {len(record_data['rows'])}")
+        
         barcodes = extract_barcodes(record_data['rows'])
         book = extract_metadata(record_data['rows'])
-        print(book)
-        print(barcodes)
-        print("-" * 40)  # Separator for readability
+        for item in barcodes:
+            item_record = {
+                'Record No.': record_num,
+                'Record Type': record_data['record_type'],
+                **item,
+                **book
+            }
+            if not args.outFile:
+                print(item_record)
+        
+        if not args.outFile:
+            print("-" * 40)  # Separator for readability
 
     return book_data
 
@@ -214,6 +228,10 @@ def extract_barcodes(html_string):
 
 # Main usage:
 book_list = html_to_excel(args.inputFile)
-# json_string = json.dumps(book_list, indent=4)
 
-# print(json_string)
+if args.outFile:
+    df = pd.DataFrame(book_list)
+
+    # Save the DataFrame to an Excel file
+    df.to_excel(args.outFile, index=False)
+    print(f"Data saved to {args.outFile}")
