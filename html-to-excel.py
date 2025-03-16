@@ -200,8 +200,9 @@ def extract_metadata(record_rows):
     call_number = ""
     title = ""
 
-    first_row = record_rows.pop(0)
-    (serial, heading) = extract_number_heading(first_row)
+    (serial, heading) = extract_number_heading(record_rows.pop(0))
+    (call_number, title) = extract_callnum_title(record_rows.pop(0))
+
 
     # for row in record_rows:
     #     cols = row.find_all('td')
@@ -230,15 +231,15 @@ def extract_metadata(record_rows):
 
     book['Serial No.'] = serial
     book['Main Heading'] = heading
-    # book['call_number'] = call_number
-    # book['title'] = title
+    book['Call Number'] = call_number
+    book['Title'] = title
 
     return book
 
 def extract_number_heading(row):
     td_elements = row.find_all('td')
 
-    if len(td_elements) > 2:
+    if len(td_elements) > 3:
         second_td = td_elements[1]
         fourth_td = td_elements[3]
             
@@ -254,6 +255,26 @@ def extract_number_heading(row):
                 return serial_num, main_heading
     
     return None, ''
+
+def extract_callnum_title(row):
+    td_elements = row.find_all('td')
+    callnum = ''
+    title_str = ''
+
+    if len(td_elements) > 1:
+        second_td = td_elements[1]
+        if second_td:
+            second_span = second_td.find('span')
+            callnum = second_span.text.strip() if second_span else ''
+
+    if len(td_elements) > 3:
+        fourth_td = td_elements[3]
+        if fourth_td:
+            fourth_span = fourth_td.find('span')
+            title_str = fourth_span.text.strip() if fourth_span else ''
+    
+    print(callnum, title_str)
+    return callnum, title_str
 
 def extract_barcodes(html_string):
     """
