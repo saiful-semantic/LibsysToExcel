@@ -80,7 +80,7 @@ def html_to_excel(html_file, output_file="output.xlsx"):
     new_record_rows = []
     new_record_type = ''
     record_count = 0
-    for tr in tqdm(all_table_rows, desc="Extracting from HTML"):
+    for tr in tqdm(all_table_rows, desc="Extracting HTML rows"):
         if is_a_footer_row(tr):
             continue
 
@@ -114,7 +114,7 @@ def html_to_excel(html_file, output_file="output.xlsx"):
     verbose_limit = args.limit if args.limit else 10
     book_data = []
 
-    for record_num, record_data in tqdm(records.items(), desc="Parsing data"):
+    for record_num, record_data in tqdm(records.items(), desc="Parsing records"):
         # Extract metadata from first few rows
         (details, remaining_rows) = extract_metadata(record_data['rows'])
         
@@ -122,10 +122,9 @@ def html_to_excel(html_file, output_file="output.xlsx"):
         barcodes = extract_barcodes_date(remaining_rows)
         
         # Prepare the data to write
-        raw_barcode_str = ''
         for item in barcodes:
             item_record = {
-                'Record No.': record_num,
+                # 'Record No.': record_num,
                 'Record Type': record_data['record_type'],
                 **item,
                 **details
@@ -133,13 +132,9 @@ def html_to_excel(html_file, output_file="output.xlsx"):
             book_data.append(item_record)
             
             # Print raw record dict in verbose mode
-            if args.verbose and record_num == 12:
-                # print(item['text'])
-                # raw_barcode_str = item['text']
+            if args.verbose and record_num < verbose_limit:
                 print(item_record)
                 print('-' * 40)
-
-        # print(raw_barcode_str)
 
     # Convert to DataFrame and save to Excel
     if book_data:
