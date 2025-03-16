@@ -81,6 +81,9 @@ def html_to_excel(html_file, output_file="output.xlsx"):
     new_record_type = ''
     record_count = 0
     for tr in tqdm(all_table_rows, desc="Extracting from HTML"):
+        if is_a_footer_row(tr):
+            continue
+
         new_record, record_type = start_of_record(tr)
 
         # Found start of a new record
@@ -170,6 +173,24 @@ def is_a_header_row(rows):
                 
                 if config["libraryName"] in library_name and 'Date' in date_label:
                     return True
+    return False
+
+def is_a_footer_row(row):
+    td_elements = row.find_all('td')
+
+    if len(td_elements) > 2:
+        second_td = td_elements[1]
+        third_td = td_elements[2]
+        
+        if second_td and third_td:
+            second_span = second_td.find('span')
+            fourth_span = third_td.find('span')
+
+            page_start = second_span.text.strip() if second_span else ''
+            page_end = fourth_span.text.strip() if fourth_span else ''
+            
+            if re.search(r"^Page\s\d+\sof$", page_start) and re.search(r"^\d+$", page_end):
+                return True
     return False
 
 def extract_metadata(book_entries):
