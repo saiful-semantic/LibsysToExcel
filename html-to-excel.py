@@ -15,8 +15,12 @@ parser.add_argument(
 parser.add_argument(
     "-l", "--limit", dest="limit", required=False, type=int, help="Limit to number of records"
 )
+parser.add_argument(
+    "-v", "--verbose", dest="verbose", required=False, action='store_true', help="Print raw record dictionary"
+)
 args = parser.parse_args()
 
+# Default config
 with open("config.json", "r", encoding="utf-8") as file:
     config = json.load(file)
 
@@ -28,27 +32,27 @@ try:
 except FileNotFoundError:
     pass  # No local config, keep defaults
 
-def html_to_excel(html_file):
+def html_to_excel(html_file, output_file="output.xlsx"):
     """
-    Extracts book data from an HTML file, joining data across tables.
+    Extracts book data from an HTML file, joins data across tables, and saves it to an Excel file.
 
     Args:
         html_file (str): Path to the HTML file.
+        output_file (str): Path to save the Excel file.
 
     Returns:
-        list: A list of dictionaries, where each dictionary represents a book.
+        None
     """
-
     try:
         with open(html_file, 'r', encoding='utf-8') as file:
             html_content = file.read().replace("\n", "")
-        
-        # Remove newlines and replace multiple spaces/tabs with a single space
-        html_content = re.sub(r"\s+", " ", html_content) 
+
+        # Remove extra whitespace
+        html_content = re.sub(r"\s+", " ", html_content)
         soup = BeautifulSoup(html_content, 'html.parser')
     except FileNotFoundError:
         print(f"Error: File '{html_file}' not found.")
-        return []
+        return
 
     tables = soup.find_all('table', class_='jrPage')
 
@@ -81,15 +85,12 @@ def html_to_excel(html_file):
 
         # Found start of a new record
         if new_record and record_type:
-
-            # Ignore header row
             if len(new_record_rows) and not is_a_header_row(new_record_rows):
                 record_count += 1
                 records[record_count] = {
                     'record_type': new_record_type,
                     'rows': new_record_rows
                 }
-
             new_record_rows = []
             new_record_type = record_type
         else:
@@ -97,7 +98,7 @@ def html_to_excel(html_file):
 
         if args.limit and record_count == args.limit:
             break
-    
+
     # Save the last row too
     if len(new_record_rows):
         record_count += 1
@@ -107,13 +108,9 @@ def html_to_excel(html_file):
         }
 
     ## Parse and extract book elements
+    verbose_limit = args.limit if args.limit else 10
     book_data = []
     for record_num, record_data in tqdm(records.items(), desc="Parsing data"):
-        if not args.outFile:
-            print(f"Record# {record_num}")
-            print(f"Type: {record_data['record_type']}")
-            print(f"Rows: {len(record_data['rows'])}")
-        
         barcodes = extract_barcodes(record_data['rows'])
         book = extract_metadata(record_data['rows'])
         for item in barcodes:
@@ -123,13 +120,20 @@ def html_to_excel(html_file):
                 **item,
                 **book
             }
-            if not args.outFile:
+            book_data.append(item_record)
+            
+            # Print raw record dict in verbose mode
+            if args.verbose and record_num <= verbose_limit:
                 print(item_record)
-        
-        if not args.outFile:
-            print("-" * 40)  # Separator for readability
+                print('-' * 40)
 
-    return book_data
+    # Convert to DataFrame and save to Excel
+    if book_data:
+        df = pd.DataFrame(book_data)
+        df.to_excel(output_file, index=False)  # Save without the index column
+        print(f"Data successfully saved to {output_file}")
+    else:
+        print("No book data found.")
 
 def start_of_record(tr):
     # Find all <td> elements in the current <tr>
@@ -226,11 +230,7 @@ def extract_barcodes(html_string):
     return result
 
 # Main usage:
-book_list = html_to_excel(args.inputFile)
-
 if args.outFile:
-    df = pd.DataFrame(book_list)
-
-    # Save the DataFrame to an Excel file
-    df.to_excel(args.outFile, index=False)
-    print(f"Data saved to {args.outFile}")
+    html_to_excel(args.inputFile, args.outFile)
+else:
+    html_to_excel(args.inputFile)

@@ -36,6 +36,7 @@ Thumbs.db
 local_settings.py
 settings_local.py
 config.local.json
+output.*
 
 # Distribution
 *.tar.gz
