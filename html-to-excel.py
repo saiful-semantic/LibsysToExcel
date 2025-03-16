@@ -113,9 +113,16 @@ def html_to_excel(html_file, output_file="output.xlsx"):
     ## Parse and extract book elements
     verbose_limit = args.limit if args.limit else 10
     book_data = []
+
     for record_num, record_data in tqdm(records.items(), desc="Parsing data"):
+        # Extract metadata from first few rows
         (details, remaining_rows) = extract_metadata(record_data['rows'])
-        barcodes = extract_barcodes(remaining_rows)
+        
+        # Extract barcodes from last row
+        barcodes = extract_barcodes_date(remaining_rows)
+        
+        # Prepare the data to write
+        raw_barcode_str = ''
         for item in barcodes:
             item_record = {
                 'Record No.': record_num,
@@ -126,9 +133,13 @@ def html_to_excel(html_file, output_file="output.xlsx"):
             book_data.append(item_record)
             
             # Print raw record dict in verbose mode
-            if args.verbose and record_num <= verbose_limit:
+            if args.verbose and record_num == 12:
+                # print(item['text'])
+                # raw_barcode_str = item['text']
                 print(item_record)
                 print('-' * 40)
+
+        # print(raw_barcode_str)
 
     # Convert to DataFrame and save to Excel
     if book_data:
@@ -203,6 +214,8 @@ def extract_metadata(record_rows):
     (serial, heading) = extract_number_heading(record_rows.pop(0))
     (call_number, title) = extract_callnum_title(record_rows.pop(0))
 
+    # Ignore rest of the content at the moment and return rest of the rows
+
     book['Serial No.'] = serial
     book['Main Heading'] = heading
     book['Call Number'] = call_number
@@ -223,7 +236,6 @@ def extract_number_heading(row):
 
             serial_num = second_span.text.strip() if second_span else ''
             main_heading = fourth_span.text.strip() if fourth_span else ''
-            print(serial_num, main_heading)
             
             if serial_num:
                 return serial_num, main_heading
@@ -246,26 +258,19 @@ def extract_callnum_title(row):
         if fourth_td:
             fourth_span = fourth_td.find('span')
             title_str = fourth_span.text.strip() if fourth_span else ''
-    
-    print(callnum, title_str)
+
     return callnum, title_str
 
-def extract_barcodes(html_string):
-    """
-    Extracts barcode and accession date from an HTML string.
-
-    Args:
-        html_string (str): The HTML string containing the barcode and accn date.
-
-    Returns:
-        list: A list of dictionaries, where each dictionary contains barcode and accn date.
-    """
+def extract_barcodes_date(html_string):
+    # Extracts barcode and accession date from an HTML string.
     text = "\n".join(tr.get_text(separator=" ", strip=True) for tr in html_string)
-    pattern = re.compile(r'(\d+)\s*\([^\)]*\)\s*Accn Date\s*:\s*(\d{2}/\d{2}/\d{4})')
+    pattern = re.compile(r'(\d+)\s*\([^\)]*\)\s*(?:-\s*[vV]\.\d+)?\s*(?:\([^\)]*\))?\s*Accn Date\s*:\s*(\d{2}\/\d{2}\/\d{4})')
     matches = pattern.findall(text)
     result = []
+    
     for barcode, accn_date in matches:
         result.append({'Barcode': barcode, 'Accn Date': accn_date})
+    
     return result
 
 # Main usage:
