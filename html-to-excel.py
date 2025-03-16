@@ -17,6 +17,17 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+with open("config.json", "r", encoding="utf-8") as file:
+    config = json.load(file)
+
+# Load local overrides if the file exists
+try:
+    with open("config.local.json", "r", encoding="utf-8") as file:
+        local_config = json.load(file)
+        config.update(local_config)  # Merge & Override
+except FileNotFoundError:
+    pass  # No local config, keep defaults
+
 def start_of_record(tr):
     # Find all <td> elements in the current <tr>
     td_elements = tr.find_all('td')
@@ -34,6 +45,26 @@ def start_of_record(tr):
                 return True, span_text
     
     return False, ''
+
+def is_a_header_row(rows):
+    if len(rows) == 1:
+        td_elements = rows[0].find_all('td')
+
+        if len(td_elements) > 3:
+            second_td = td_elements[1]
+            fourth_td = td_elements[3]
+            
+            if second_td and fourth_td:
+                second_span = second_td.find('span')
+                fourth_span = fourth_td.find('span')
+
+                library_name = second_span.text.strip() if second_span else ''
+                date_label = fourth_span.text.strip() if fourth_span else ''
+                
+                if config["libraryName"] in library_name and 'Date' in date_label:
+                    return True
+    
+    return False
 
 def html_to_excel(html_file):
     """
@@ -85,16 +116,25 @@ def html_to_excel(html_file):
     record_count = 0
     for tr in all_table_rows:
         new_record, record_type = start_of_record(tr)
-        if new_record:
-            record_count += 1
-            records[record_count] = {
-                'record_type': new_record_type,
-                'rows': new_record_rows
-            }
+
+        # Found start of a new record
+        if new_record and record_type:
+
+            # Ignore header row
+            if len(new_record_rows) and not is_a_header_row(new_record_rows):
+                record_count += 1
+                records[record_count] = {
+                    'record_type': new_record_type,
+                    'rows': new_record_rows
+                }
+
             new_record_rows = []
             new_record_type = record_type
         else:
             new_record_rows.append(tr)
+        
+        if record_count > 1:
+            break
 
     ## Parse and extract book elements
     book_data = []
@@ -116,8 +156,6 @@ def extract_metadata(book_entries):
     author = ""
     call_number = ""
     title = ""
-    description = ""
-    location = ""
 
     for row in book_entries:
         cols = row.find_all('td')
@@ -131,35 +169,23 @@ def extract_metadata(book_entries):
                 if author == "":
                     for span in number_span:
                         if not span.text.strip().replace('.', '').isdigit() and call_number == "":
-                            if len(span.text.strip()) > 0 and "BS" not in span.text.strip() and "Loc" not in span.text.strip():
+                            if len(span.text.strip()) > 0:
                                 author = span.text.strip()
                 if call_number == "":
                     for span in number_span:
-                        if len(span.text.strip().replace('.', '')) > 0 and author not in span.text.strip() and "BS" not in span.text.strip() and "Loc" not in span.text.strip():
+                        if len(span.text.strip().replace('.', '')) > 0 and author not in span.text.strip():
                             if not span.text.strip().replace('.', '').isdigit():
                                 call_number = span.text.strip()
                 if title == "":
                     for span in number_span:
-                        if len(span.text.strip()) > 0 and author not in span.text.strip() and call_number not in span.text.strip() and "BS" not in span.text.strip() and "Loc" not in span.text.strip():
+                        if len(span.text.strip()) > 0 and author not in span.text.strip() and call_number not in span.text.strip():
                             if not span.text.strip().replace('.', '').isdigit():
                                 title = span.text.strip()
-                if description == "":
-                    for span in number_span:
-                        if len(span.text.strip()) > 0 and author not in span.text.strip() and call_number not in span.text.strip() and title not in span.text.strip() and "BS" not in span.text.strip() and "Loc" not in span.text.strip():
-                            if not span.text.strip().replace('.', '').isdigit():
-                                description += span.text.strip()
-
-                if location == "":
-                    for span in number_span:
-                        if "Loc" in span.text.strip():
-                            location = span.text.strip()
 
     book['number'] = number
     book['author'] = author
     book['call_number'] = call_number
     book['title'] = title
-    book['description'] = description
-    book['location'] = location
 
     return book
 
