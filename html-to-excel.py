@@ -28,44 +28,6 @@ try:
 except FileNotFoundError:
     pass  # No local config, keep defaults
 
-def start_of_record(tr):
-    # Find all <td> elements in the current <tr>
-    td_elements = tr.find_all('td')
-    
-    # Check if the second <td> exists and has the desired attributes
-    if len(td_elements) > 1:  # Ensure there is at least a second <td>
-        second_td = td_elements[1]  # Get the second <td>
-        
-        # Check if the second <td> has colspan="9" and contains a <span>
-        if second_td.get('colspan') == '9':
-            span = second_td.find('span')  # Find the <span> inside the <td>
-            if span:
-                # Capture the text inside the <span>
-                span_text = span.text.strip()
-                return True, span_text
-    
-    return False, ''
-
-def is_a_header_row(rows):
-    if len(rows) == 1:
-        td_elements = rows[0].find_all('td')
-
-        if len(td_elements) > 3:
-            second_td = td_elements[1]
-            fourth_td = td_elements[3]
-            
-            if second_td and fourth_td:
-                second_span = second_td.find('span')
-                fourth_span = fourth_td.find('span')
-
-                library_name = second_span.text.strip() if second_span else ''
-                date_label = fourth_span.text.strip() if fourth_span else ''
-                
-                if config["libraryName"] in library_name and 'Date' in date_label:
-                    return True
-    
-    return False
-
 def html_to_excel(html_file):
     """
     Extracts book data from an HTML file, joining data across tables.
@@ -168,6 +130,43 @@ def html_to_excel(html_file):
             print("-" * 40)  # Separator for readability
 
     return book_data
+
+def start_of_record(tr):
+    # Find all <td> elements in the current <tr>
+    td_elements = tr.find_all('td')
+    
+    # Check if the second <td> exists and has the desired attributes
+    if len(td_elements) > 1:  # Ensure there is at least a second <td>
+        second_td = td_elements[1]  # Get the second <td>
+        
+        # Check if the second <td> has colspan="9" and contains a <span>
+        if second_td.get('colspan') == '9':
+            span = second_td.find('span')  # Find the <span> inside the <td>
+            if span:
+                # Capture the text inside the <span>
+                span_text = span.text.strip()
+                return True, span_text
+    
+    return False, ''
+
+def is_a_header_row(rows):
+    if len(rows) == 1:
+        td_elements = rows[0].find_all('td')
+
+        if len(td_elements) > 3:
+            second_td = td_elements[1]
+            fourth_td = td_elements[3]
+            
+            if second_td and fourth_td:
+                second_span = second_td.find('span')
+                fourth_span = fourth_td.find('span')
+
+                library_name = second_span.text.strip() if second_span else ''
+                date_label = fourth_span.text.strip() if fourth_span else ''
+                
+                if config["libraryName"] in library_name and 'Date' in date_label:
+                    return True
+    return False
 
 def extract_metadata(book_entries):
     book = {}
