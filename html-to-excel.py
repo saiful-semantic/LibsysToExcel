@@ -17,6 +17,24 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+def start_of_record(tr):
+    # Find all <td> elements in the current <tr>
+    td_elements = tr.find_all('td')
+    
+    # Check if the second <td> exists and has the desired attributes
+    if len(td_elements) > 1:  # Ensure there is at least a second <td>
+        second_td = td_elements[1]  # Get the second <td>
+        
+        # Check if the second <td> has colspan="9" and contains a <span>
+        if second_td.get('colspan') == '9':
+            span = second_td.find('span')  # Find the <span> inside the <td>
+            if span:
+                # Capture the text inside the <span>
+                span_text = span.text.strip()
+                return True, span_text
+    
+    return False, ''
+
 def html_to_excel(html_file):
     """
     Extracts book data from an HTML file, joining data across tables.
@@ -27,48 +45,72 @@ def html_to_excel(html_file):
     Returns:
         list: A list of dictionaries, where each dictionary represents a book.
     """
+
     try:
         with open(html_file, 'r', encoding='utf-8') as file:
-            soup = BeautifulSoup(file, 'html.parser')
+            html_content = file.read().replace("\n", "")
+        
+        # Remove newlines and replace multiple spaces/tabs with a single space
+        html_content = re.sub(r"\s+", " ", html_content) 
+        soup = BeautifulSoup(html_content, 'html.parser')
     except FileNotFoundError:
         print(f"Error: File '{html_file}' not found.")
         return []
 
-    book_data = []
     tables = soup.find_all('table', class_='jrPage')
 
-    all_book_entries = []
-    for table in tables:
-        rows = table.find_all('tr')
-        bs_count = 0
-        for i, row in enumerate(rows):
-          if i>3:
-            cols = row.find_all('td')
-            if len(cols) > 0:
-              bs_test = row.find_all('span', string="BS")
-              if len(bs_test)>0:
-                bs_count+=1
-              if bs_count>0:
-                all_book_entries.append(row)
+    ## Extract all non-empty tr elements
+    # all_table_rows = []
+    # for table in tables:
+    #     rows = table.find_all('tr')
+    #     for row in rows:
+    #         # Check if the row contains any non-empty text
+    #         if any(cell.get_text(strip=True) for cell in row.find_all(['td', 'th'])):
+    #             all_table_rows.append(row)
+    
+    ## ChatGPT simplification :)
+    all_table_rows = [
+        row for table in tables
+        for row in table.find_all('tr')
+        if any(cell.get_text(strip=True) for cell in row.find_all(['td', 'th']))
+    ]
+    # print(all_table_rows)
 
-    book_entries_list = []
-    current_book_entries = []
-    for row in all_book_entries:
-      bs_test = row.find_all('span', string="BS")
-      if len(bs_test)>0 and len(current_book_entries)>0:
-        book_entries_list.append(current_book_entries.copy())
-        current_book_entries.clear()
-      current_book_entries.append(row)
-    if len(current_book_entries) > 0:
-      book_entries_list.append(current_book_entries.copy())
+    ## Prepare master records object
+    records = {}
 
-    for book_entries in book_entries_list:
-      book = process_book_entries(book_entries)
-      book_data.append(book)
+    ## Identify records using a record identifier
+    new_record_rows = []
+    new_record_type = ''
+    record_count = 0
+    for tr in all_table_rows:
+        new_record, record_type = start_of_record(tr)
+        if new_record:
+            record_count += 1
+            records[record_count] = {
+                'record_type': new_record_type,
+                'rows': new_record_rows
+            }
+            new_record_rows = []
+            new_record_type = record_type
+        else:
+            new_record_rows.append(tr)
+
+    ## Parse and extract book elements
+    book_data = []
+    for record_num, record_data in records.items():
+        print(f"Record# {record_num}")
+        print(f"Type: {record_data['record_type']}")
+        print(f"Rows: {len(record_data['rows'])}")
+        barcodes = extract_barcodes(record_data['rows'])
+        book = extract_metadata(record_data['rows'])
+        print(book)
+        print(barcodes)
+        print("-" * 40)  # Separator for readability
 
     return book_data
 
-def process_book_entries(book_entries):
+def extract_metadata(book_entries):
     book = {}
     number = ""
     author = ""
@@ -76,7 +118,6 @@ def process_book_entries(book_entries):
     title = ""
     description = ""
     location = ""
-    barcode_accn_data = []  # Initialize an empty list for barcode/accn dat
 
     for row in book_entries:
         cols = row.find_all('td')
@@ -107,9 +148,6 @@ def process_book_entries(book_entries):
                         if len(span.text.strip()) > 0 and author not in span.text.strip() and call_number not in span.text.strip() and title not in span.text.strip() and "BS" not in span.text.strip() and "Loc" not in span.text.strip():
                             if not span.text.strip().replace('.', '').isdigit():
                                 description += span.text.strip()
-                        barcode_accn_list = extract_barcode_accn_date(str(span))
-                        if barcode_accn_list:
-                            barcode_accn_data.extend(barcode_accn_list)
 
                 if location == "":
                     for span in number_span:
@@ -122,11 +160,10 @@ def process_book_entries(book_entries):
     book['title'] = title
     book['description'] = description
     book['location'] = location
-    book['barcode_accn_data'] = barcode_accn_data
 
     return book
 
-def extract_barcode_accn_date(html_string):
+def extract_barcodes(html_string):
     """
     Extracts barcode and accession date from an HTML string.
 
@@ -136,8 +173,7 @@ def extract_barcode_accn_date(html_string):
     Returns:
         list: A list of dictionaries, where each dictionary contains barcode and accn date.
     """
-    soup = BeautifulSoup(html_string, 'html.parser')
-    text = soup.get_text(separator=' ')
+    text = "\n".join(tr.get_text(separator=" ", strip=True) for tr in html_string)
     pattern = re.compile(r'(\d+)\s*\([^\)]*\)\s*Accn Date\s*:\s*(\d{2}/\d{2}/\d{4})')
     matches = pattern.findall(text)
     result = []
@@ -147,6 +183,6 @@ def extract_barcode_accn_date(html_string):
 
 # Main usage:
 book_list = html_to_excel(args.inputFile)
-json_string = json.dumps(book_list, indent=4)
+# json_string = json.dumps(book_list, indent=4)
 
-print(json_string)
+# print(json_string)
