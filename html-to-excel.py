@@ -120,7 +120,7 @@ def html_to_excel(html_file, output_file="output.xlsx"):
             item_record = {
                 'Record No.': record_num,
                 'Record Type': record_data['record_type'],
-                **item,
+                # **item,
                 **book
             }
             book_data.append(item_record)
@@ -184,53 +184,76 @@ def is_a_footer_row(row):
         
         if second_td and third_td:
             second_span = second_td.find('span')
-            fourth_span = third_td.find('span')
+            third_span = third_td.find('span')
 
             page_start = second_span.text.strip() if second_span else ''
-            page_end = fourth_span.text.strip() if fourth_span else ''
+            page_end = third_span.text.strip() if third_span else ''
             
             if re.search(r"^Page\s\d+\sof$", page_start) and re.search(r"^\d+$", page_end):
                 return True
     return False
 
-def extract_metadata(book_entries):
+def extract_metadata(record_rows):
     book = {}
-    number = ""
-    author = ""
+    serial = ""
+    heading = ""
     call_number = ""
     title = ""
 
-    for row in book_entries:
-        cols = row.find_all('td')
-        if len(cols) > 0:
-            number_span = row.find_all('span')
-            if len(number_span) > 0:
-                if number == "":
-                    for span in number_span:
-                        if span.text.strip().replace('.', '').isdigit():
-                            number = span.text.strip()
-                if author == "":
-                    for span in number_span:
-                        if not span.text.strip().replace('.', '').isdigit() and call_number == "":
-                            if len(span.text.strip()) > 0:
-                                author = span.text.strip()
-                if call_number == "":
-                    for span in number_span:
-                        if len(span.text.strip().replace('.', '')) > 0 and author not in span.text.strip():
-                            if not span.text.strip().replace('.', '').isdigit():
-                                call_number = span.text.strip()
-                if title == "":
-                    for span in number_span:
-                        if len(span.text.strip()) > 0 and author not in span.text.strip() and call_number not in span.text.strip():
-                            if not span.text.strip().replace('.', '').isdigit():
-                                title = span.text.strip()
+    first_row = record_rows.pop(0)
+    (serial, heading) = extract_number_heading(first_row)
 
-    book['number'] = number
-    book['author'] = author
-    book['call_number'] = call_number
-    book['title'] = title
+    # for row in record_rows:
+    #     cols = row.find_all('td')
+    #     if len(cols) > 0:
+    #         number_span = row.find_all('span')
+    #         if len(number_span) > 0:
+    #             if number == "":
+    #                 for span in number_span:
+    #                     if span.text.strip().replace('.', '').isdigit():
+    #                         number = span.text.strip()
+    #             if author == "":
+    #                 for span in number_span:
+    #                     if not span.text.strip().replace('.', '').isdigit() and call_number == "":
+    #                         if len(span.text.strip()) > 0:
+    #                             author = span.text.strip()
+    #             if call_number == "":
+    #                 for span in number_span:
+    #                     if len(span.text.strip().replace('.', '')) > 0 and author not in span.text.strip():
+    #                         if not span.text.strip().replace('.', '').isdigit():
+    #                             call_number = span.text.strip()
+    #             if title == "":
+    #                 for span in number_span:
+    #                     if len(span.text.strip()) > 0 and author not in span.text.strip() and call_number not in span.text.strip():
+    #                         if not span.text.strip().replace('.', '').isdigit():
+    #                             title = span.text.strip()
+
+    book['Serial No.'] = serial
+    book['Main Heading'] = heading
+    # book['call_number'] = call_number
+    # book['title'] = title
 
     return book
+
+def extract_number_heading(row):
+    td_elements = row.find_all('td')
+
+    if len(td_elements) > 2:
+        second_td = td_elements[1]
+        fourth_td = td_elements[3]
+            
+        if second_td and fourth_td:
+            second_span = second_td.find('span')
+            fourth_span = fourth_td.find('span')
+
+            serial_num = second_span.text.strip() if second_span else ''
+            main_heading = fourth_span.text.strip() if fourth_span else ''
+            print(serial_num, main_heading)
+            
+            if serial_num:
+                return serial_num, main_heading
+    
+    return None, ''
 
 def extract_barcodes(html_string):
     """
