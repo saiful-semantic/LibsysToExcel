@@ -132,9 +132,14 @@ def html_to_excel(html_file):
             new_record_type = record_type
         else:
             new_record_rows.append(tr)
-        
-        if record_count > 1:
-            break
+    
+    # Save the last row too
+    if len(new_record_rows):
+        record_count += 1
+        records[record_count] = {
+            'record_type': new_record_type,
+            'rows': new_record_rows
+        }
 
     ## Parse and extract book elements
     book_data = []
